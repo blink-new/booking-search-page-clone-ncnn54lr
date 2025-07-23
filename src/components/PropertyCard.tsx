@@ -2,50 +2,65 @@ import { useState } from 'react'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
 import { Star, Heart, MapPin, Wifi, Car, Coffee, Dumbbell, Waves } from 'lucide-react'
+import { BookingForm } from './BookingForm'
+import type { Hotel, Room } from '../types/models'
 
-interface Property {
-  id: number
-  name: string
-  location: string
-  rating: number
-  reviewCount: number
-  price: number
-  originalPrice: number
-  images: string[]
-  amenities: string[]
-  freeCancellation: boolean
-  breakfastIncluded: boolean
-  starRating: number
-  propertyType: string
-  distance: string
+interface PropertyWithRooms extends Hotel {
+  rooms: Room[]
+  minPrice: number
+  maxPrice: number
 }
 
 interface PropertyCardProps {
-  property: Property
+  property: PropertyWithRooms
 }
 
 const amenityIcons: { [key: string]: any } = {
+  'WiFi': Wifi,
   'Free WiFi': Wifi,
   'Parking': Car,
   'Restaurant': Coffee,
   'Fitness center': Dumbbell,
+  'Gym': Dumbbell,
   'Swimming pool': Waves,
+  'Pool': Waves,
 }
 
 export function PropertyCard({ property }: PropertyCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [isLiked, setIsLiked] = useState(false)
+  const [showBookingForm, setShowBookingForm] = useState(false)
+
+  // Ensure images is an array
+  const images = Array.isArray(property.images) ? property.images : 
+    (typeof property.images === 'string' ? property.images.split(',').map(img => img.trim()) : [])
+  
+  // Fallback image if no images available
+  const displayImages = images.length > 0 ? images : [
+    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop'
+  ]
+
+  // Ensure amenities is an array
+  const amenities = Array.isArray(property.amenities) ? property.amenities :
+    (typeof property.amenities === 'string' ? property.amenities.split(',').map(a => a.trim()) : [])
 
   const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev + 1) % property.images.length)
+    setCurrentImageIndex((prev) => (prev + 1) % displayImages.length)
   }
 
   const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev - 1 + property.images.length) % property.images.length)
+    setCurrentImageIndex((prev) => (prev - 1 + displayImages.length) % displayImages.length)
   }
 
-  const discount = Math.round(((property.originalPrice - property.price) / property.originalPrice) * 100)
+  // Calculate average rating (for now use star_rating as base)
+  const displayRating = property.star_rating * 2 // Convert 5-star to 10-point scale
+  const reviewCount = Math.floor(Math.random() * 1000) + 100 // Mock review count
+
+  // Calculate if there's a discount (mock for now)
+  const originalPrice = Math.floor(property.minPrice * 1.2)
+  const discount = Math.round(((originalPrice - property.minPrice) / originalPrice) * 100)
 
   return (
     <Card className="property-card overflow-hidden">
@@ -53,13 +68,17 @@ export function PropertyCard({ property }: PropertyCardProps) {
         {/* Image Gallery */}
         <div className="relative lg:w-80 h-64 lg:h-auto">
           <img
-            src={property.images[currentImageIndex]}
+            src={displayImages[currentImageIndex]}
             alt={property.name}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              // Fallback to a default image if the image fails to load
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop'
+            }}
           />
           
           {/* Image Navigation */}
-          {property.images.length > 1 && (
+          {displayImages.length > 1 && (
             <>
               <button
                 onClick={prevImage}
@@ -81,9 +100,9 @@ export function PropertyCard({ property }: PropertyCardProps) {
           )}
 
           {/* Image Dots */}
-          {property.images.length > 1 && (
+          {displayImages.length > 1 && (
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
-              {property.images.map((_, index) => (
+              {displayImages.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentImageIndex(index)}
@@ -117,11 +136,11 @@ export function PropertyCard({ property }: PropertyCardProps) {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex">
-                  {Array.from({ length: property.starRating }).map((_, i) => (
+                  {Array.from({ length: property.star_rating }).map((_, i) => (
                     <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   ))}
                 </div>
-                <span className="text-sm text-gray-600">{property.propertyType}</span>
+                <span className="text-sm text-gray-600">Hotel</span>
               </div>
               
               <h3 className="text-xl font-semibold text-blue-600 hover:underline cursor-pointer mb-1">
@@ -130,70 +149,102 @@ export function PropertyCard({ property }: PropertyCardProps) {
               
               <div className="flex items-center text-sm text-gray-600 mb-2">
                 <MapPin className="w-4 h-4 mr-1" />
-                {property.location}
+                {property.address}, {property.city}, {property.country}
               </div>
               
               <div className="text-sm text-gray-600 mb-3">
-                {property.distance}
+                {Math.random() > 0.5 ? '0.5' : '1.2'} km from center
               </div>
+
+              {/* Description */}
+              {property.description && (
+                <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                  {property.description}
+                </p>
+              )}
 
               {/* Amenities */}
               <div className="flex flex-wrap gap-2 mb-4">
-                {property.amenities.slice(0, 4).map((amenity) => {
-                  const Icon = amenityIcons[amenity]
+                {amenities.slice(0, 4).map((amenity) => {
+                  const Icon = amenityIcons[amenity] || Coffee
                   return (
                     <div key={amenity} className="flex items-center gap-1 text-xs text-gray-600">
-                      {Icon && <Icon className="w-3 h-3" />}
+                      <Icon className="w-3 h-3" />
                       <span>{amenity}</span>
                     </div>
                   )
                 })}
-                {property.amenities.length > 4 && (
-                  <span className="text-xs text-gray-500">+{property.amenities.length - 4} more</span>
+                {amenities.length > 4 && (
+                  <span className="text-xs text-gray-500">+{amenities.length - 4} more</span>
                 )}
               </div>
 
               {/* Special Offers */}
               <div className="flex flex-wrap gap-2 mb-4">
-                {property.freeCancellation && (
-                  <Badge variant="outline" className="text-green-600 border-green-600">
-                    Free cancellation
-                  </Badge>
-                )}
-                {property.breakfastIncluded && (
+                <Badge variant="outline" className="text-green-600 border-green-600">
+                  Free cancellation
+                </Badge>
+                {Math.random() > 0.5 && (
                   <Badge variant="outline" className="text-blue-600 border-blue-600">
                     Breakfast included
                   </Badge>
                 )}
               </div>
+
+              {/* Available Rooms */}
+              {property.rooms.length > 0 && (
+                <div className="text-sm text-gray-600 mb-2">
+                  {property.rooms.length} room type{property.rooms.length > 1 ? 's' : ''} available
+                </div>
+              )}
             </div>
 
             {/* Rating and Price */}
             <div className="text-right ml-6">
               <div className="flex items-center justify-end mb-2">
                 <div className="text-right mr-2">
-                  <div className="text-sm font-medium">Excellent</div>
-                  <div className="text-xs text-gray-600">{property.reviewCount} reviews</div>
+                  <div className="text-sm font-medium">
+                    {displayRating >= 8 ? 'Excellent' : displayRating >= 7 ? 'Very Good' : 'Good'}
+                  </div>
+                  <div className="text-xs text-gray-600">{reviewCount} reviews</div>
                 </div>
                 <div className="bg-blue-600 text-white px-2 py-1 rounded text-sm font-semibold">
-                  {property.rating}
+                  {displayRating.toFixed(1)}
                 </div>
               </div>
 
               <div className="text-right">
-                {property.originalPrice > property.price && (
+                {discount > 0 && (
                   <div className="text-sm text-gray-500 line-through">
-                    ${property.originalPrice}
+                    ${originalPrice}
                   </div>
                 )}
                 <div className="text-2xl font-bold price-highlight">
-                  ${property.price}
+                  ${property.minPrice}
                 </div>
+                {property.maxPrice > property.minPrice && (
+                  <div className="text-sm text-gray-600">
+                    from ${property.minPrice} - ${property.maxPrice}
+                  </div>
+                )}
                 <div className="text-sm text-gray-600 mb-3">per night</div>
                 
-                <Button className="bg-booking-accent hover:bg-blue-700 w-full">
-                  See availability
-                </Button>
+                <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-booking-accent hover:bg-blue-700 w-full">
+                      See availability
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Book {property.name}</DialogTitle>
+                    </DialogHeader>
+                    <BookingForm 
+                      hotel={property} 
+                      onClose={() => setShowBookingForm(false)}
+                    />
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
           </div>

@@ -4,22 +4,28 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Calendar } from './ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { CalendarIcon } from 'lucide-react'
 import { format } from 'date-fns'
 import { Room, Hotel } from '../types/models'
-import { DatabaseService } from '../services/database'
+import { reservationService } from '../services/database'
 import { blink } from '../blink/client'
 
-interface BookingFormProps {
-  room: Room
-  hotel: Hotel
-  onClose: () => void
-  onSuccess: () => void
+interface PropertyWithRooms extends Hotel {
+  rooms: Room[]
+  minPrice: number
+  maxPrice: number
 }
 
-export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProps) {
+interface BookingFormProps {
+  hotel: PropertyWithRooms
+  onClose: () => void
+}
+
+export function BookingForm({ hotel, onClose }: BookingFormProps) {
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [checkInDate, setCheckInDate] = useState<Date>()
   const [checkOutDate, setCheckOutDate] = useState<Date>()
   const [guests, setGuests] = useState(1)
@@ -36,13 +42,14 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
   }
 
   const calculateTotal = () => {
+    if (!selectedRoom) return 0
     const nights = calculateNights()
-    return nights * room.price_per_night
+    return nights * selectedRoom.price_per_night
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!checkInDate || !checkOutDate || !guestName || !guestEmail) {
+    if (!selectedRoom || !checkInDate || !checkOutDate || !guestName || !guestEmail) {
       alert('Please fill in all required fields')
       return
     }
@@ -51,8 +58,8 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
     try {
       const user = await blink.auth.me()
       
-      await DatabaseService.createReservation({
-        room_id: room.id,
+      await reservationService.create({
+        room_id: selectedRoom.id,
         user_id: user.id,
         guest_name: guestName,
         guest_email: guestEmail,
@@ -65,7 +72,7 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
         status: 'pending'
       })
 
-      onSuccess()
+      alert('Reservation created successfully! You will receive a confirmation email shortly.')
       onClose()
     } catch (error) {
       console.error('Error creating reservation:', error)
@@ -81,12 +88,51 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
         <CardTitle>Book Your Stay</CardTitle>
         <div className="text-sm text-gray-600">
           <p className="font-medium">{hotel.name}</p>
-          <p>{room.room_type}</p>
-          <p className="text-lg font-bold text-blue-600">${room.price_per_night}/night</p>
+          <p>{hotel.address}, {hotel.city}, {hotel.country}</p>
+          <div className="flex">
+            {Array.from({ length: hotel.star_rating }).map((_, i) => (
+              <span key={i} className="text-yellow-400">★</span>
+            ))}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Room Selection */}
+          <div>
+            <Label htmlFor="room-select">Select Room *</Label>
+            <Select 
+              value={selectedRoom?.id || ''} 
+              onValueChange={(value) => {
+                const room = hotel.rooms.find(r => r.id === value)
+                setSelectedRoom(room || null)
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a room type" />
+              </SelectTrigger>
+              <SelectContent>
+                {hotel.rooms.map(room => (
+                  <SelectItem key={room.id} value={room.id}>
+                    <div className="flex justify-between items-center w-full">
+                      <span>{room.room_type}</span>
+                      <span className="ml-4 font-bold">${room.price_per_night}/night</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedRoom && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                <p className="font-medium">{selectedRoom.room_type}</p>
+                <p className="text-sm text-gray-600">{selectedRoom.description}</p>
+                <p className="text-sm text-gray-600">Max guests: {selectedRoom.max_occupancy}</p>
+                <p className="text-lg font-bold text-blue-600">${selectedRoom.price_per_night}/night</p>
+              </div>
+            )}
+          </div>
+
+          {/* Date Selection */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="check-in">Check-in Date *</Label>
@@ -136,19 +182,23 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
             </div>
           </div>
 
+          {/* Guest Count */}
           <div>
             <Label htmlFor="guests">Number of Guests</Label>
             <Input
               id="guests"
               type="number"
               min="1"
-              max={room.max_guests}
+              max={selectedRoom?.max_occupancy || 4}
               value={guests}
-              onChange={(e) => setGuests(parseInt(e.target.value))}
+              onChange={(e) => setGuests(parseInt(e.target.value) || 1)}
             />
-            <p className="text-sm text-gray-500 mt-1">Maximum {room.max_guests} guests</p>
+            {selectedRoom && (
+              <p className="text-sm text-gray-500 mt-1">Maximum {selectedRoom.max_occupancy} guests</p>
+            )}
           </div>
 
+          {/* Guest Information */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="guest-name">Full Name *</Label>
@@ -195,10 +245,15 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
             />
           </div>
 
-          {checkInDate && checkOutDate && (
+          {/* Booking Summary */}
+          {selectedRoom && checkInDate && checkOutDate && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-medium mb-2">Booking Summary</h3>
               <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Room:</span>
+                  <span>{selectedRoom.room_type}</span>
+                </div>
                 <div className="flex justify-between">
                   <span>Check-in:</span>
                   <span>{format(checkInDate, "PPP")}</span>
@@ -217,7 +272,7 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
                 </div>
                 <div className="flex justify-between">
                   <span>Rate per night:</span>
-                  <span>${room.price_per_night}</span>
+                  <span>${selectedRoom.price_per_night}</span>
                 </div>
                 <div className="border-t pt-2 mt-2">
                   <div className="flex justify-between font-bold">
@@ -229,13 +284,14 @@ export function BookingForm({ room, hotel, onClose, onSuccess }: BookingFormProp
             </div>
           )}
 
+          {/* Action Buttons */}
           <div className="flex gap-4 pt-4">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
             <Button 
               type="submit" 
-              disabled={loading || !checkInDate || !checkOutDate || !guestName || !guestEmail}
+              disabled={loading || !selectedRoom || !checkInDate || !checkOutDate || !guestName || !guestEmail}
               className="flex-1 bg-blue-600 hover:bg-blue-700"
             >
               {loading ? 'Booking...' : `Book Now - $${calculateTotal()}`}
