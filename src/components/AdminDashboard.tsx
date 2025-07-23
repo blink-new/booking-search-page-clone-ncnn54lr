@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
 import { Hotel, Room, Reservation, Review } from '../types/models'
-import { DatabaseService } from '../services/database'
+import { hotelService, roomService, reservationService, reviewService } from '../services/database'
 import { blink } from '../blink/client'
 
 export function AdminDashboard() {
@@ -48,10 +48,10 @@ export function AdminDashboard() {
   const loadData = async () => {
     try {
       const [hotelsData, roomsData, reservationsData, reviewsData] = await Promise.all([
-        DatabaseService.getHotels(),
-        DatabaseService.getRooms(),
-        DatabaseService.getReservations(),
-        DatabaseService.getReviews()
+        hotelService.getAll(),
+        roomService.getAll(),
+        reservationService.getAll(),
+        reviewService.getAll()
       ])
       
       setHotels(hotelsData)
@@ -72,11 +72,15 @@ export function AdminDashboard() {
   const handleCreateHotel = async () => {
     try {
       const user = await blink.auth.me()
-      await DatabaseService.createHotel({
+      await hotelService.create({
         ...newHotel,
-        manager_id: user.id,
         amenities: newHotel.amenities.split(',').map(a => a.trim()),
-        images: newHotel.images.split(',').map(i => i.trim())
+        images: newHotel.images.split(',').map(i => i.trim()),
+        phone: '',
+        email: '',
+        check_in_time: '15:00',
+        check_out_time: '11:00',
+        policies: 'Standard hotel policies apply'
       })
       
       setNewHotel({
@@ -100,10 +104,14 @@ export function AdminDashboard() {
 
   const handleCreateRoom = async () => {
     try {
-      await DatabaseService.createRoom({
+      await roomService.create({
         ...newRoom,
         amenities: newRoom.amenities.split(',').map(a => a.trim()),
-        images: newRoom.images.split(',').map(i => i.trim())
+        images: newRoom.images.split(',').map(i => i.trim()),
+        max_occupancy: newRoom.max_guests,
+        bed_type: 'King',
+        room_size: 35,
+        is_available: newRoom.available
       })
       
       setNewRoom({
@@ -125,7 +133,7 @@ export function AdminDashboard() {
 
   const updateReservationStatus = async (reservationId: string, status: string) => {
     try {
-      await DatabaseService.updateReservationStatus(reservationId, status)
+      await reservationService.update(reservationId, { status: status as any })
       loadData()
     } catch (error) {
       console.error('Error updating reservation:', error)
@@ -398,10 +406,10 @@ export function AdminDashboard() {
                         <TableCell>{hotel?.name || 'Unknown'}</TableCell>
                         <TableCell className="font-medium">{room.room_type}</TableCell>
                         <TableCell>${room.price_per_night}</TableCell>
-                        <TableCell>{room.max_guests}</TableCell>
+                        <TableCell>{room.max_occupancy}</TableCell>
                         <TableCell>
-                          <Badge variant={room.available ? "default" : "secondary"}>
-                            {room.available ? "Available" : "Unavailable"}
+                          <Badge variant={Number(room.is_available) > 0 ? "default" : "secondary"}>
+                            {Number(room.is_available) > 0 ? "Available" : "Unavailable"}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -505,7 +513,7 @@ export function AdminDashboard() {
                     return (
                       <TableRow key={review.id}>
                         <TableCell>{hotel?.name || 'Unknown'}</TableCell>
-                        <TableCell>{review.guest_name}</TableCell>
+                        <TableCell>{review.reviewer_name}</TableCell>
                         <TableCell>
                           <div className="flex">
                             {Array.from({length: review.rating}).map((_, i) => (

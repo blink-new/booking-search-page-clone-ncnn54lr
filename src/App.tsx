@@ -5,9 +5,11 @@ import { FilterSidebar } from './components/FilterSidebar'
 import { PropertyGrid } from './components/PropertyGrid'
 import { SortBar } from './components/SortBar'
 import { MapToggle } from './components/MapToggle'
+import { AdminDashboard } from './components/AdminDashboard'
 
 function App() {
   const [showMap, setShowMap] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
   const [filters, setFilters] = useState({
     priceRange: [0, 500],
     starRating: [],
@@ -19,9 +21,36 @@ function App() {
   })
   const [sortBy, setSortBy] = useState('recommended')
 
+  const handleAdminClick = () => {
+    setShowAdmin(true)
+  }
+
+  const handleBackToSearch = () => {
+    setShowAdmin(false)
+  }
+
+  if (showAdmin) {
+    return (
+      <div className="min-h-screen bg-booking-bg">
+        <Header onAdminClick={handleAdminClick} />
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="mb-4">
+            <button
+              onClick={handleBackToSearch}
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              ← Back to Search
+            </button>
+          </div>
+          <AdminDashboard />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-booking-bg">
-      <Header />
+      <Header onAdminClick={handleAdminClick} />
       <SearchBar />
       
       <div className="max-w-7xl mx-auto px-4 py-6">
